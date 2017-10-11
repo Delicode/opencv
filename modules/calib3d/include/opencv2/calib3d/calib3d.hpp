@@ -181,6 +181,16 @@ CVAPI(void) cvProjectPoints2( const CvMat* object_points, const CvMat* rotation_
                               CvMat* dpddist CV_DEFAULT(NULL),
                               double aspect_ratio CV_DEFAULT(0));
 
+/* Projects object points to the view plane using
+   the specified extrinsic and intrinsic camera parameters */
+CVAPI(void) cvProjectPoints3d( const CvMat* object_points, const CvMat* rotation_vector,
+                              const CvMat* translation_vector, const CvMat* camera_matrix,
+                              const CvMat* distortion_coeffs, CvMat* image_points,
+                              CvMat* dpdrot CV_DEFAULT(NULL), CvMat* dpdt CV_DEFAULT(NULL),
+                              CvMat* dpdf CV_DEFAULT(NULL), CvMat* dpdc CV_DEFAULT(NULL),
+                              CvMat* dpddist CV_DEFAULT(NULL),
+                              double aspect_ratio CV_DEFAULT(0));
+
 /* Finds extrinsic camera parameters from
    a few known corresponding point pairs and intrinsic parameters */
 CVAPI(void) cvFindExtrinsicCameraParams2( const CvMat* object_points,
@@ -458,6 +468,14 @@ CV_EXPORTS_W void composeRT( InputArray rvec1, InputArray tvec1,
 
 //! projects points from the model coordinate space to the image coordinates. Also computes derivatives of the image coordinates w.r.t the intrinsic and extrinsic camera parameters
 CV_EXPORTS_W void projectPoints( InputArray objectPoints,
+                                 InputArray rvec, InputArray tvec,
+                                 InputArray cameraMatrix, InputArray distCoeffs,
+                                 OutputArray imagePoints,
+                                 OutputArray jacobian=noArray(),
+                                 double aspectRatio=0 );
+
+//! projects points from the model coordinate space to the image coordinates. Also computes derivatives of the image coordinates w.r.t the intrinsic and extrinsic camera parameters
+CV_EXPORTS_W void projectPoints3d( InputArray objectPoints,
                                  InputArray rvec, InputArray tvec,
                                  InputArray cameraMatrix, InputArray distCoeffs,
                                  OutputArray imagePoints,
