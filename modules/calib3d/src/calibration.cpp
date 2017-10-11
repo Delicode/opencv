@@ -1201,9 +1201,9 @@ CV_IMPL void cvProjectPoints3d( const CvMat* objectPoints,
 
     if( CV_IS_CONT_MAT(imagePoints->type) &&
         (CV_MAT_DEPTH(imagePoints->type) == CV_32F || CV_MAT_DEPTH(imagePoints->type) == CV_64F) &&
-        ((imagePoints->rows == 1 && CV_MAT_CN(imagePoints->type) == 2) ||
-        (imagePoints->rows == count && CV_MAT_CN(imagePoints->type)*imagePoints->cols == 2) ||
-        (imagePoints->rows == 2 && CV_MAT_CN(imagePoints->type) == 1 && imagePoints->cols == count)))
+        ((imagePoints->rows == 1 && CV_MAT_CN(imagePoints->type) == 3) ||
+        (imagePoints->rows == count && CV_MAT_CN(imagePoints->type)*imagePoints->cols == 3) ||
+        (imagePoints->rows == 3 && CV_MAT_CN(imagePoints->type) == 1 && imagePoints->cols == count)))
     {
         _m = cvCreateMat( imagePoints->rows, imagePoints->cols, CV_MAKETYPE(CV_64F,CV_MAT_CN(imagePoints->type)) );
         cvConvert(imagePoints, _m);
