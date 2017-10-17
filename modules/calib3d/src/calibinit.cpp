@@ -62,6 +62,8 @@
 #include "precomp.hpp"
 #include "circlesgrid.hpp"
 #include <stdarg.h>
+#include <iostream>
+#include <time.h>
 
 //#define ENABLE_TRIM_COL_ROW
 
@@ -311,6 +313,9 @@ int cvFindChessboardCorners( const void* arr, CvSize pattern_size,
     // This is necessary because some squares simply do not separate properly with a single dilation.  However,
     // we want to use the minimum number of dilations possible since dilations cause the squares to become smaller,
     // making it difficult to detect smaller squares.
+    clock_t t1 = clock();
+    int timeout_s = 3.f;
+
     for( k = 0; k < 6; k++ )
     {
         int max_quad_buf_size = 0;
@@ -370,7 +375,16 @@ int cvFindChessboardCorners( const void* arr, CvSize pattern_size,
                     thresh_img->rows-1), CV_RGB(255,255,255), 3, 8);
 
                 quad_count = icvGenerateQuads( &quads, &corners, storage, thresh_img, flags, &max_quad_buf_size);
+                clock_t t2 = clock();
 
+                if ( ((double)(t2-t1) / CLOCKS_PER_SEC) > timeout_s) {
+                    std::cout << "Timeout in findChessboardCorners" << std::endl;
+                    cvFree(&quads);
+                    cvFree(&corners);
+                    cvFree(&quad_group);
+                    cvFree(&corner_group);
+                    return false;
+                }
                 PRINTF("Quad count: %d/%d\n", quad_count, expected_corners_num);
             }
 
@@ -1684,10 +1698,19 @@ icvGenerateQuads( CvCBQuad **out_quads, CvCBCorner **out_corners,
     // initialize contour retrieving routine
     scanner = cvStartFindContours( image, temp_storage, sizeof(CvContourEx),
                                    CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE );
+    int timeout_s = 3.f;
+    clock_t t1 = clock();
 
     // get all the contours one by one
     while( (src_contour = cvFindNextContour( scanner )) != 0 )
     {
+        clock_t t2 = clock();
+        if ( ((double)(t2 - t1) / CLOCKS_PER_SEC) > timeout_s)
+        {
+            std::cout << "find contours timeout" << std::endl;
+            break;
+        }
+
         CvSeq *dst_contour = 0;
         CvRect rect = ((CvContour*)src_contour)->rect;
 
