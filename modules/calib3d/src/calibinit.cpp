@@ -73,6 +73,8 @@
 #include "circlesgrid.hpp"
 
 #include <stack>
+#include <iostream>
+#include <time.h>
 
 //#define ENABLE_TRIM_COL_ROW
 
@@ -535,6 +537,8 @@ bool findChessboardCorners(InputArray image_, Size pattern_size,
     }
 
     ChessBoardDetector detector(pattern_size);
+    clock_t t1 = clock();
+    int timeout_s = 6;
 
     // Try our standard "1" dilation, but if the pattern is not found, iterate the whole procedure with higher dilations.
     // This is necessary because some squares simply do not separate properly with a single dilation.  However,
@@ -542,6 +546,13 @@ bool findChessboardCorners(InputArray image_, Size pattern_size,
     // making it difficult to detect smaller squares.
     for (int dilations = min_dilations; dilations <= max_dilations; dilations++)
     {
+
+        clock_t t2 = clock();
+        if ( ((double)(t2-t1) / CLOCKS_PER_SEC) > timeout_s) {
+            std::cout << "Timeout (1) in findchessboardcorners" << std::endl;
+            return false;
+        }
+
         //USE BINARY IMAGE COMPUTED USING icvBinarizationHistogramBased METHOD
         dilate( thresh_img_new, thresh_img_new, Mat(), Point(-1, -1), 1 );
 
@@ -597,6 +608,12 @@ bool findChessboardCorners(InputArray image_, Size pattern_size,
         {
             for (int dilations = min_dilations; dilations <= max_dilations; dilations++)
             {
+                clock_t t2 = clock();
+                if ( ((double)(t2-t1) / CLOCKS_PER_SEC) > timeout_s) {
+                    std::cout << "Timeout (1) in findchessboardcorners" << std::endl;
+                    return false;
+                }
+
                 // convert the input grayscale image to binary (black-n-white)
                 if (useAdaptive)
                 {

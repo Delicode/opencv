@@ -526,6 +526,14 @@ CV_EXPORTS_W void projectPoints( InputArray objectPoints,
                                  OutputArray jacobian = noArray(),
                                  double aspectRatio = 0 );
 
+//! projects points from the model coordinate space to the image coordinates. Also computes derivatives of the image coordinates w.r.t the intrinsic and extrinsic camera parameters
+CV_EXPORTS_W void projectPoints3d(InputArray objectPoints,
+                                 InputArray rvec, InputArray tvec,
+                                 InputArray cameraMatrix, InputArray distCoeffs,
+                                 OutputArray imagePoints,
+                                 OutputArray jacobian=noArray(),
+                                 double aspectRatio=0 );
+
 /** @example homography_from_camera_displacement.cpp
   An example program about homography from the camera displacement
 

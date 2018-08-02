@@ -965,6 +965,455 @@ CV_IMPL void cvProjectPoints2( const CvMat* objectPoints,
         cvConvert( _dpdk, dpdk );
 }
 
+CV_IMPL void cvProjectPoints3d( const CvMat* objectPoints,
+                  const CvMat* r_vec,
+                  const CvMat* t_vec,
+                  const CvMat* A,
+                  const CvMat* distCoeffs,
+                  CvMat* imagePoints, CvMat* dpdr,
+                  CvMat* dpdt, CvMat* dpdf,
+                  CvMat* dpdc, CvMat* dpdk,
+                  double aspectRatio )
+{
+    Ptr<CvMat> matM, _m;
+    Ptr<CvMat> _dpdr, _dpdt, _dpdc, _dpdf, _dpdk;
+
+    int i, j, count;
+    int calc_derivatives;
+    const CvPoint3D64f* M;
+    CvPoint3D64f* m;
+    double r[3], R[9], dRdr[27], t[3], a[9], k[14] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0}, fx, fy, cx, cy;
+    Matx33d matTilt = Matx33d::eye();
+    Matx33d dMatTiltdTauX(0,0,0,0,0,0,0,-1,0);
+    Matx33d dMatTiltdTauY(0,0,0,0,0,0,1,0,0);
+    CvMat _r, _t, _a = cvMat( 3, 3, CV_64F, a ), _k;
+    CvMat matR = cvMat( 3, 3, CV_64F, R ), _dRdr = cvMat( 3, 9, CV_64F, dRdr );
+    double *dpdr_p = 0, *dpdt_p = 0, *dpdk_p = 0, *dpdf_p = 0, *dpdc_p = 0;
+    int dpdr_step = 0, dpdt_step = 0, dpdk_step = 0, dpdf_step = 0, dpdc_step = 0;
+    bool fixedAspectRatio = aspectRatio > FLT_EPSILON;
+
+    if( !CV_IS_MAT(objectPoints) || !CV_IS_MAT(r_vec) ||
+        !CV_IS_MAT(t_vec) || !CV_IS_MAT(A) ||
+        /*!CV_IS_MAT(distCoeffs) ||*/ !CV_IS_MAT(imagePoints) )
+        CV_Error( CV_StsBadArg, "One of required arguments is not a valid matrix" );
+
+    int total = objectPoints->rows * objectPoints->cols * CV_MAT_CN(objectPoints->type);
+    if(total % 3 != 0)
+    {
+        //we have stopped support of homogeneous coordinates because it cause ambiguity in interpretation of the input data
+        CV_Error( CV_StsBadArg, "Homogeneous coordinates are not supported" );
+    }
+    count = total / 3;
+
+    if( CV_IS_CONT_MAT(objectPoints->type) &&
+        (CV_MAT_DEPTH(objectPoints->type) == CV_32F || CV_MAT_DEPTH(objectPoints->type) == CV_64F)&&
+        ((objectPoints->rows == 1 && CV_MAT_CN(objectPoints->type) == 3) ||
+        (objectPoints->rows == count && CV_MAT_CN(objectPoints->type)*objectPoints->cols == 3) ||
+        (objectPoints->rows == 3 && CV_MAT_CN(objectPoints->type) == 1 && objectPoints->cols == count)))
+    {
+        matM.reset(cvCreateMat( objectPoints->rows, objectPoints->cols, CV_MAKETYPE(CV_64F,CV_MAT_CN(objectPoints->type)) ));
+        cvConvert(objectPoints, matM);
+    }
+    else
+    {
+//        matM = cvCreateMat( 1, count, CV_64FC3 );
+//        cvConvertPointsHomogeneous( objectPoints, matM );
+        CV_Error( CV_StsBadArg, "Homogeneous coordinates are not supported" );
+    }
+
+    if( CV_IS_CONT_MAT(imagePoints->type) &&
+        (CV_MAT_DEPTH(imagePoints->type) == CV_32F || CV_MAT_DEPTH(imagePoints->type) == CV_64F) &&
+        ((imagePoints->rows == 1 && CV_MAT_CN(imagePoints->type) == 3) ||
+        (imagePoints->rows == count && CV_MAT_CN(imagePoints->type)*imagePoints->cols == 3) ||
+        (imagePoints->rows == 3 && CV_MAT_CN(imagePoints->type) == 1 && imagePoints->cols == count)))
+    {
+        _m.reset(cvCreateMat( imagePoints->rows, imagePoints->cols, CV_MAKETYPE(CV_64F,CV_MAT_CN(imagePoints->type)) ));
+        cvConvert(imagePoints, _m);
+    }
+    else
+    {
+//        _m = cvCreateMat( 1, count, CV_64FC2 );
+        CV_Error( CV_StsBadArg, "Homogeneous coordinates are not supported" );
+    }
+
+    M = (CvPoint3D64f*)matM->data.db;
+    m = (CvPoint3D64f*)_m->data.db;
+
+    if( (CV_MAT_DEPTH(r_vec->type) != CV_64F && CV_MAT_DEPTH(r_vec->type) != CV_32F) ||
+        (((r_vec->rows != 1 && r_vec->cols != 1) ||
+        r_vec->rows*r_vec->cols*CV_MAT_CN(r_vec->type) != 3) &&
+        ((r_vec->rows != 3 && r_vec->cols != 3) || CV_MAT_CN(r_vec->type) != 1)))
+        CV_Error( CV_StsBadArg, "Rotation must be represented by 1x3 or 3x1 "
+                  "floating-point rotation vector, or 3x3 rotation matrix" );
+
+    if( r_vec->rows == 3 && r_vec->cols == 3 )
+    {
+        _r = cvMat( 3, 1, CV_64FC1, r );
+        cvRodrigues2( r_vec, &_r );
+        cvRodrigues2( &_r, &matR, &_dRdr );
+        cvCopy( r_vec, &matR );
+    }
+    else
+    {
+        _r = cvMat( r_vec->rows, r_vec->cols, CV_MAKETYPE(CV_64F,CV_MAT_CN(r_vec->type)), r );
+        cvConvert( r_vec, &_r );
+        cvRodrigues2( &_r, &matR, &_dRdr );
+    }
+
+    if( (CV_MAT_DEPTH(t_vec->type) != CV_64F && CV_MAT_DEPTH(t_vec->type) != CV_32F) ||
+        (t_vec->rows != 1 && t_vec->cols != 1) ||
+        t_vec->rows*t_vec->cols*CV_MAT_CN(t_vec->type) != 3 )
+        CV_Error( CV_StsBadArg,
+            "Translation vector must be 1x3 or 3x1 floating-point vector" );
+
+    _t = cvMat( t_vec->rows, t_vec->cols, CV_MAKETYPE(CV_64F,CV_MAT_CN(t_vec->type)), t );
+    cvConvert( t_vec, &_t );
+
+    if( (CV_MAT_TYPE(A->type) != CV_64FC1 && CV_MAT_TYPE(A->type) != CV_32FC1) ||
+        A->rows != 3 || A->cols != 3 )
+        CV_Error( CV_StsBadArg, "Instrinsic parameters must be 3x3 floating-point matrix" );
+
+    cvConvert( A, &_a );
+    fx = a[0]; fy = a[4];
+    cx = a[2]; cy = a[5];
+
+    if( fixedAspectRatio )
+        fx = fy*aspectRatio;
+
+    if( distCoeffs )
+    {
+        if( !CV_IS_MAT(distCoeffs) ||
+            (CV_MAT_DEPTH(distCoeffs->type) != CV_64F &&
+            CV_MAT_DEPTH(distCoeffs->type) != CV_32F) ||
+            (distCoeffs->rows != 1 && distCoeffs->cols != 1) ||
+            (distCoeffs->rows*distCoeffs->cols*CV_MAT_CN(distCoeffs->type) != 4 &&
+            distCoeffs->rows*distCoeffs->cols*CV_MAT_CN(distCoeffs->type) != 5 &&
+            distCoeffs->rows*distCoeffs->cols*CV_MAT_CN(distCoeffs->type) != 8 &&
+            distCoeffs->rows*distCoeffs->cols*CV_MAT_CN(distCoeffs->type) != 12 &&
+            distCoeffs->rows*distCoeffs->cols*CV_MAT_CN(distCoeffs->type) != 14) )
+            CV_Error( CV_StsBadArg, cvDistCoeffErr );
+
+        _k = cvMat( distCoeffs->rows, distCoeffs->cols,
+                    CV_MAKETYPE(CV_64F,CV_MAT_CN(distCoeffs->type)), k );
+        cvConvert( distCoeffs, &_k );
+        if(k[12] != 0 || k[13] != 0)
+        {
+          detail::computeTiltProjectionMatrix(k[12], k[13],
+            &matTilt, &dMatTiltdTauX, &dMatTiltdTauY);
+        }
+    }
+
+    if( dpdr )
+    {
+        if( !CV_IS_MAT(dpdr) ||
+            (CV_MAT_TYPE(dpdr->type) != CV_32FC1 &&
+            CV_MAT_TYPE(dpdr->type) != CV_64FC1) ||
+            dpdr->rows != count*2 || dpdr->cols != 3 )
+            CV_Error( CV_StsBadArg, "dp/drot must be 2Nx3 floating-point matrix" );
+
+        if( CV_MAT_TYPE(dpdr->type) == CV_64FC1 )
+        {
+            _dpdr.reset(cvCloneMat(dpdr));
+        }
+        else
+            _dpdr.reset(cvCreateMat( 2*count, 3, CV_64FC1 ));
+        dpdr_p = _dpdr->data.db;
+        dpdr_step = _dpdr->step/sizeof(dpdr_p[0]);
+    }
+
+    if( dpdt )
+    {
+        if( !CV_IS_MAT(dpdt) ||
+            (CV_MAT_TYPE(dpdt->type) != CV_32FC1 &&
+            CV_MAT_TYPE(dpdt->type) != CV_64FC1) ||
+            dpdt->rows != count*2 || dpdt->cols != 3 )
+            CV_Error( CV_StsBadArg, "dp/dT must be 2Nx3 floating-point matrix" );
+
+        if( CV_MAT_TYPE(dpdt->type) == CV_64FC1 )
+        {
+            _dpdt.reset(cvCloneMat(dpdt));
+        }
+        else
+            _dpdt.reset(cvCreateMat( 2*count, 3, CV_64FC1 ));
+        dpdt_p = _dpdt->data.db;
+        dpdt_step = _dpdt->step/sizeof(dpdt_p[0]);
+    }
+
+    if( dpdf )
+    {
+        if( !CV_IS_MAT(dpdf) ||
+            (CV_MAT_TYPE(dpdf->type) != CV_32FC1 && CV_MAT_TYPE(dpdf->type) != CV_64FC1) ||
+            dpdf->rows != count*2 || dpdf->cols != 2 )
+            CV_Error( CV_StsBadArg, "dp/df must be 2Nx2 floating-point matrix" );
+
+        if( CV_MAT_TYPE(dpdf->type) == CV_64FC1 )
+        {
+            _dpdf.reset(cvCloneMat(dpdf));
+        }
+        else
+            _dpdf.reset(cvCreateMat( 2*count, 2, CV_64FC1 ));
+        dpdf_p = _dpdf->data.db;
+        dpdf_step = _dpdf->step/sizeof(dpdf_p[0]);
+    }
+
+    if( dpdc )
+    {
+        if( !CV_IS_MAT(dpdc) ||
+            (CV_MAT_TYPE(dpdc->type) != CV_32FC1 && CV_MAT_TYPE(dpdc->type) != CV_64FC1) ||
+            dpdc->rows != count*2 || dpdc->cols != 2 )
+            CV_Error( CV_StsBadArg, "dp/dc must be 2Nx2 floating-point matrix" );
+
+        if( CV_MAT_TYPE(dpdc->type) == CV_64FC1 )
+        {
+            _dpdc.reset(cvCloneMat(dpdc));
+        }
+        else
+            _dpdc.reset(cvCreateMat( 2*count, 2, CV_64FC1 ));
+        dpdc_p = _dpdc->data.db;
+        dpdc_step = _dpdc->step/sizeof(dpdc_p[0]);
+    }
+
+    if( dpdk )
+    {
+        if( !CV_IS_MAT(dpdk) ||
+            (CV_MAT_TYPE(dpdk->type) != CV_32FC1 && CV_MAT_TYPE(dpdk->type) != CV_64FC1) ||
+            dpdk->rows != count*2 || (dpdk->cols != 14 && dpdk->cols != 12 && dpdk->cols != 8 && dpdk->cols != 5 && dpdk->cols != 4 && dpdk->cols != 2) )
+            CV_Error( CV_StsBadArg, "dp/df must be 2Nx14, 2Nx12, 2Nx8, 2Nx5, 2Nx4 or 2Nx2 floating-point matrix" );
+
+        if( !distCoeffs )
+            CV_Error( CV_StsNullPtr, "distCoeffs is NULL while dpdk is not" );
+
+        if( CV_MAT_TYPE(dpdk->type) == CV_64FC1 )
+        {
+            _dpdk.reset(cvCloneMat(dpdk));
+        }
+        else
+            _dpdk.reset(cvCreateMat( dpdk->rows, dpdk->cols, CV_64FC1 ));
+        dpdk_p = _dpdk->data.db;
+        dpdk_step = _dpdk->step/sizeof(dpdk_p[0]);
+    }
+
+    calc_derivatives = dpdr || dpdt || dpdf || dpdc || dpdk;
+
+    for( i = 0; i < count; i++ )
+    {
+        double X = M[i].x, Y = M[i].y, Z = M[i].z;
+        double x = R[0]*X + R[1]*Y + R[2]*Z + t[0];
+        double y = R[3]*X + R[4]*Y + R[5]*Z + t[1];
+        double z = R[6]*X + R[7]*Y + R[8]*Z + t[2];
+        double r2, r4, r6, a1, a2, a3, cdist, icdist2;
+        double xd, yd, xd0, yd0, invProj;
+        Vec3d vecTilt;
+        Vec3d dVecTilt;
+        Matx22d dMatTilt;
+        Vec2d dXdYd;
+
+        z = z ? 1./z : 1;
+        x *= z; y *= z;
+
+        r2 = x*x + y*y;
+        r4 = r2*r2;
+        r6 = r4*r2;
+        a1 = 2*x*y;
+        a2 = r2 + 2*x*x;
+        a3 = r2 + 2*y*y;
+        cdist = 1 + k[0]*r2 + k[1]*r4 + k[4]*r6;
+        icdist2 = 1./(1 + k[5]*r2 + k[6]*r4 + k[7]*r6);
+        xd0 = x*cdist*icdist2 + k[2]*a1 + k[3]*a2 + k[8]*r2+k[9]*r4;
+        yd0 = y*cdist*icdist2 + k[2]*a3 + k[3]*a1 + k[10]*r2+k[11]*r4;
+
+        // additional distortion by projecting onto a tilt plane
+        vecTilt = matTilt*Vec3d(xd0, yd0, 1);
+        invProj = vecTilt(2) ? 1./vecTilt(2) : 1;
+        xd = invProj * vecTilt(0);
+        yd = invProj * vecTilt(1);
+
+        m[i].x = xd*fx + cx;
+        m[i].y = yd*fy + cy;
+        m[i].z = 1./z;
+
+        if( calc_derivatives )
+        {
+            if( dpdc_p )
+            {
+                dpdc_p[0] = 1; dpdc_p[1] = 0; // dp_xdc_x; dp_xdc_y
+                dpdc_p[dpdc_step] = 0;
+                dpdc_p[dpdc_step+1] = 1;
+                dpdc_p += dpdc_step*2;
+            }
+
+            if( dpdf_p )
+            {
+                if( fixedAspectRatio )
+                {
+                    dpdf_p[0] = 0; dpdf_p[1] = xd*aspectRatio; // dp_xdf_x; dp_xdf_y
+                    dpdf_p[dpdf_step] = 0;
+                    dpdf_p[dpdf_step+1] = yd;
+                }
+                else
+                {
+                    dpdf_p[0] = xd; dpdf_p[1] = 0;
+                    dpdf_p[dpdf_step] = 0;
+                    dpdf_p[dpdf_step+1] = yd;
+                }
+                dpdf_p += dpdf_step*2;
+            }
+            for (int row = 0; row < 2; ++row)
+                for (int col = 0; col < 2; ++col)
+                    dMatTilt(row,col) = matTilt(row,col)*vecTilt(2)
+                      - matTilt(2,col)*vecTilt(row);
+            double invProjSquare = (invProj*invProj);
+            dMatTilt *= invProjSquare;
+            if( dpdk_p )
+            {
+                dXdYd = dMatTilt*Vec2d(x*icdist2*r2, y*icdist2*r2);
+                dpdk_p[0] = fx*dXdYd(0);
+                dpdk_p[dpdk_step] = fy*dXdYd(1);
+                dXdYd = dMatTilt*Vec2d(x*icdist2*r4, y*icdist2*r4);
+                dpdk_p[1] = fx*dXdYd(0);
+                dpdk_p[dpdk_step+1] = fy*dXdYd(1);
+                if( _dpdk->cols > 2 )
+                {
+                    dXdYd = dMatTilt*Vec2d(a1, a3);
+                    dpdk_p[2] = fx*dXdYd(0);
+                    dpdk_p[dpdk_step+2] = fy*dXdYd(1);
+                    dXdYd = dMatTilt*Vec2d(a2, a1);
+                    dpdk_p[3] = fx*dXdYd(0);
+                    dpdk_p[dpdk_step+3] = fy*dXdYd(1);
+                    if( _dpdk->cols > 4 )
+                    {
+                        dXdYd = dMatTilt*Vec2d(x*icdist2*r6, y*icdist2*r6);
+                        dpdk_p[4] = fx*dXdYd(0);
+                        dpdk_p[dpdk_step+4] = fy*dXdYd(1);
+
+                        if( _dpdk->cols > 5 )
+                        {
+                            dXdYd = dMatTilt*Vec2d(
+                              x*cdist*(-icdist2)*icdist2*r2, y*cdist*(-icdist2)*icdist2*r2);
+                            dpdk_p[5] = fx*dXdYd(0);
+                            dpdk_p[dpdk_step+5] = fy*dXdYd(1);
+                            dXdYd = dMatTilt*Vec2d(
+                              x*cdist*(-icdist2)*icdist2*r4, y*cdist*(-icdist2)*icdist2*r4);
+                            dpdk_p[6] = fx*dXdYd(0);
+                            dpdk_p[dpdk_step+6] = fy*dXdYd(1);
+                            dXdYd = dMatTilt*Vec2d(
+                              x*cdist*(-icdist2)*icdist2*r6, y*cdist*(-icdist2)*icdist2*r6);
+                            dpdk_p[7] = fx*dXdYd(0);
+                            dpdk_p[dpdk_step+7] = fy*dXdYd(1);
+                            if( _dpdk->cols > 8 )
+                            {
+                                dXdYd = dMatTilt*Vec2d(r2, 0);
+                                dpdk_p[8] = fx*dXdYd(0); //s1
+                                dpdk_p[dpdk_step+8] = fy*dXdYd(1); //s1
+                                dXdYd = dMatTilt*Vec2d(r4, 0);
+                                dpdk_p[9] = fx*dXdYd(0); //s2
+                                dpdk_p[dpdk_step+9] = fy*dXdYd(1); //s2
+                                dXdYd = dMatTilt*Vec2d(0, r2);
+                                dpdk_p[10] = fx*dXdYd(0);//s3
+                                dpdk_p[dpdk_step+10] = fy*dXdYd(1); //s3
+                                dXdYd = dMatTilt*Vec2d(0, r4);
+                                dpdk_p[11] = fx*dXdYd(0);//s4
+                                dpdk_p[dpdk_step+11] = fy*dXdYd(1); //s4
+                                if( _dpdk->cols > 12 )
+                                {
+                                    dVecTilt = dMatTiltdTauX * Vec3d(xd0, yd0, 1);
+                                    dpdk_p[12] = fx * invProjSquare * (
+                                      dVecTilt(0) * vecTilt(2) - dVecTilt(2) * vecTilt(0));
+                                    dpdk_p[dpdk_step+12] = fy*invProjSquare * (
+                                      dVecTilt(1) * vecTilt(2) - dVecTilt(2) * vecTilt(1));
+                                    dVecTilt = dMatTiltdTauY * Vec3d(xd0, yd0, 1);
+                                    dpdk_p[13] = fx * invProjSquare * (
+                                      dVecTilt(0) * vecTilt(2) - dVecTilt(2) * vecTilt(0));
+                                    dpdk_p[dpdk_step+13] = fy * invProjSquare * (
+                                      dVecTilt(1) * vecTilt(2) - dVecTilt(2) * vecTilt(1));
+                                }
+                            }
+                        }
+                    }
+                }
+                dpdk_p += dpdk_step*2;
+            }
+
+            if( dpdt_p )
+            {
+                double dxdt[] = { z, 0, -x*z }, dydt[] = { 0, z, -y*z };
+                for( j = 0; j < 3; j++ )
+                {
+                    double dr2dt = 2*x*dxdt[j] + 2*y*dydt[j];
+                    double dcdist_dt = k[0]*dr2dt + 2*k[1]*r2*dr2dt + 3*k[4]*r4*dr2dt;
+                    double dicdist2_dt = -icdist2*icdist2*(k[5]*dr2dt + 2*k[6]*r2*dr2dt + 3*k[7]*r4*dr2dt);
+                    double da1dt = 2*(x*dydt[j] + y*dxdt[j]);
+                    double dmxdt = (dxdt[j]*cdist*icdist2 + x*dcdist_dt*icdist2 + x*cdist*dicdist2_dt +
+                                       k[2]*da1dt + k[3]*(dr2dt + 4*x*dxdt[j]) + k[8]*dr2dt + 2*r2*k[9]*dr2dt);
+                    double dmydt = (dydt[j]*cdist*icdist2 + y*dcdist_dt*icdist2 + y*cdist*dicdist2_dt +
+                                       k[2]*(dr2dt + 4*y*dydt[j]) + k[3]*da1dt + k[10]*dr2dt + 2*r2*k[11]*dr2dt);
+                    dXdYd = dMatTilt*Vec2d(dmxdt, dmydt);
+                    dpdt_p[j] = fx*dXdYd(0);
+                    dpdt_p[dpdt_step+j] = fy*dXdYd(1);
+                }
+                dpdt_p += dpdt_step*2;
+            }
+
+            if( dpdr_p )
+            {
+                double dx0dr[] =
+                {
+                    X*dRdr[0] + Y*dRdr[1] + Z*dRdr[2],
+                    X*dRdr[9] + Y*dRdr[10] + Z*dRdr[11],
+                    X*dRdr[18] + Y*dRdr[19] + Z*dRdr[20]
+                };
+                double dy0dr[] =
+                {
+                    X*dRdr[3] + Y*dRdr[4] + Z*dRdr[5],
+                    X*dRdr[12] + Y*dRdr[13] + Z*dRdr[14],
+                    X*dRdr[21] + Y*dRdr[22] + Z*dRdr[23]
+                };
+                double dz0dr[] =
+                {
+                    X*dRdr[6] + Y*dRdr[7] + Z*dRdr[8],
+                    X*dRdr[15] + Y*dRdr[16] + Z*dRdr[17],
+                    X*dRdr[24] + Y*dRdr[25] + Z*dRdr[26]
+                };
+                for( j = 0; j < 3; j++ )
+                {
+                    double dxdr = z*(dx0dr[j] - x*dz0dr[j]);
+                    double dydr = z*(dy0dr[j] - y*dz0dr[j]);
+                    double dr2dr = 2*x*dxdr + 2*y*dydr;
+                    double dcdist_dr = (k[0] + 2*k[1]*r2 + 3*k[4]*r4)*dr2dr;
+                    double dicdist2_dr = -icdist2*icdist2*(k[5] + 2*k[6]*r2 + 3*k[7]*r4)*dr2dr;
+                    double da1dr = 2*(x*dydr + y*dxdr);
+                    double dmxdr = (dxdr*cdist*icdist2 + x*dcdist_dr*icdist2 + x*cdist*dicdist2_dr +
+                                       k[2]*da1dr + k[3]*(dr2dr + 4*x*dxdr) + (k[8] + 2*r2*k[9])*dr2dr);
+                    double dmydr = (dydr*cdist*icdist2 + y*dcdist_dr*icdist2 + y*cdist*dicdist2_dr +
+                                       k[2]*(dr2dr + 4*y*dydr) + k[3]*da1dr + (k[10] + 2*r2*k[11])*dr2dr);
+                    dXdYd = dMatTilt*Vec2d(dmxdr, dmydr);
+                    dpdr_p[j] = fx*dXdYd(0);
+                    dpdr_p[dpdr_step+j] = fy*dXdYd(1);
+                }
+                dpdr_p += dpdr_step*2;
+            }
+        }
+    }
+
+    if( _m != imagePoints )
+        cvConvert( _m, imagePoints );
+
+    if( _dpdr != dpdr )
+        cvConvert( _dpdr, dpdr );
+
+    if( _dpdt != dpdt )
+        cvConvert( _dpdt, dpdt );
+
+    if( _dpdf != dpdf )
+        cvConvert( _dpdf, dpdf );
+
+    if( _dpdc != dpdc )
+        cvConvert( _dpdc, dpdc );
+
+    if( _dpdk != dpdk )
+        cvConvert( _dpdk, dpdk );
+}
+
 
 CV_IMPL void cvFindExtrinsicCameraParams2( const CvMat* objectPoints,
                   const CvMat* imagePoints, const CvMat* A,
@@ -3339,6 +3788,56 @@ void cv::projectPoints( InputArray _opoints,
 
     cvProjectPoints2( &c_objectPoints, &c_rvec, &c_tvec, &c_cameraMatrix, &c_distCoeffs,
                       &c_imagePoints, pdpdrot, pdpdt, pdpdf, pdpdc, pdpddist, aspectRatio );
+}
+
+void cv::projectPoints3d( InputArray _opoints,
+                        InputArray _rvec,
+                        InputArray _tvec,
+                        InputArray _cameraMatrix,
+                        InputArray _distCoeffs,
+                        OutputArray _ipoints,
+                        OutputArray _jacobian,
+                        double aspectRatio )
+{
+    Mat opoints = _opoints.getMat();
+    int npoints = opoints.checkVector(3), depth = opoints.depth();
+    CV_Assert(npoints >= 0 && (depth == CV_32F || depth == CV_64F));
+
+    CvMat dpdrot, dpdt, dpdf, dpdc, dpddist;
+    CvMat *pdpdrot=0, *pdpdt=0, *pdpdf=0, *pdpdc=0, *pdpddist=0;
+
+    _ipoints.create(npoints, 1, CV_MAKETYPE(depth, 3), -1, true);
+    Mat imagePoints = _ipoints.getMat();
+    CvMat c_imagePoints(imagePoints);
+    CvMat c_objectPoints = opoints;
+    Mat cameraMatrix = _cameraMatrix.getMat();
+
+    Mat rvec = _rvec.getMat(), tvec = _tvec.getMat();
+    CvMat c_cameraMatrix = cameraMatrix;
+    CvMat c_rvec = rvec, c_tvec = tvec;
+
+    double dc0buf[5]={0};
+    Mat dc0(5,1,CV_64F,dc0buf);
+    Mat distCoeffs = _distCoeffs.getMat();
+    if( distCoeffs.empty() )
+        distCoeffs = dc0;
+    CvMat c_distCoeffs = distCoeffs;
+    int ndistCoeffs = distCoeffs.rows + distCoeffs.cols - 1;
+
+    if( _jacobian.needed() )
+    {
+        _jacobian.create(npoints*2, 3+3+2+2+ndistCoeffs, CV_64F);
+        Mat jacobian = _jacobian.getMat();
+        pdpdrot = &(dpdrot = jacobian.colRange(0, 3));
+        pdpdt = &(dpdt = jacobian.colRange(3, 6));
+        pdpdf = &(dpdf = jacobian.colRange(6, 8));
+        pdpdc = &(dpdc = jacobian.colRange(8, 10));
+        pdpddist = &(dpddist = jacobian.colRange(10, 10+ndistCoeffs));
+    }
+
+    cvProjectPoints3d( &c_objectPoints, &c_rvec, &c_tvec, &c_cameraMatrix, &c_distCoeffs,
+                      &c_imagePoints, pdpdrot, pdpdt, pdpdf, pdpdc, pdpddist, aspectRatio );
+
 }
 
 cv::Mat cv::initCameraMatrix2D( InputArrayOfArrays objectPoints,
