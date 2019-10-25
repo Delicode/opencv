@@ -42,8 +42,8 @@
 #ifndef OPENCV_DNN_DNN_SHAPE_UTILS_HPP
 #define OPENCV_DNN_DNN_SHAPE_UTILS_HPP
 
-#include <opencv2/core.hpp>
-#include <opencv2/core/types_c.h>
+#include <opencv2/dnn/dnn.hpp>
+#include <opencv2/core/types_c.h>  // CV_MAX_DIM
 #include <iostream>
 #include <ostream>
 #include <sstream>
@@ -51,12 +51,6 @@
 namespace cv {
 namespace dnn {
 CV__DNN_EXPERIMENTAL_NS_BEGIN
-
-//Useful shortcut
-inline std::ostream &operator<< (std::ostream &s, cv::Range &r)
-{
-    return s << "[" << r.start << ", " << r.end << ")";
-}
 
 //Slicing
 
@@ -215,7 +209,7 @@ inline Range clamp(const Range& r, int axisSize)
 {
     Range clamped(std::max(r.start, 0),
                   r.end > 0 ? std::min(r.end, axisSize) : axisSize + r.end + 1);
-    CV_Assert(clamped.start < clamped.end, clamped.end <= axisSize);
+    CV_Assert_N(clamped.start < clamped.end, clamped.end <= axisSize);
     return clamped;
 }
 

@@ -46,7 +46,10 @@
 #include "opencv2/core.hpp"
 
 /**
-  @defgroup imgproc Image processing
+  @defgroup imgproc Image Processing
+
+This module includes image-processing functions.
+
   @{
     @defgroup imgproc_filter Image Filtering
 
@@ -148,6 +151,7 @@ case, the color[3] is simply copied to the repainted pixels. Thus, if you want t
 semi-transparent shapes, you can paint them in a separate buffer and then blend it with the main
 image.
 
+    @defgroup imgproc_color_conversions Color Space Conversions
     @defgroup imgproc_colormap ColorMaps in OpenCV
 
 The human perception isn't built for observing fine changes in grayscale images. Human eyes are more
@@ -392,7 +396,9 @@ enum ConnectedComponentsTypes {
     CC_STAT_WIDTH  = 2, //!< The horizontal size of the bounding box
     CC_STAT_HEIGHT = 3, //!< The vertical size of the bounding box
     CC_STAT_AREA   = 4, //!< The total area (in pixels) of the connected component
-    CC_STAT_MAX    = 5
+#ifndef CV_DOXYGEN
+    CC_STAT_MAX    = 5 //!< Max enumeration value. Used internally only for memory allocation
+#endif
 };
 
 //! connected components algorithm
@@ -450,6 +456,9 @@ enum ShapeMatchModes {
 
 //! @} imgproc_shape
 
+//! @addtogroup imgproc_feature
+//! @{
+
 //! Variants of a Hough transform
 enum HoughModes {
 
@@ -470,13 +479,14 @@ enum HoughModes {
 };
 
 //! Variants of Line Segment %Detector
-//! @ingroup imgproc_feature
 enum LineSegmentDetectorModes {
     LSD_REFINE_NONE = 0, //!< No refinement applied
     LSD_REFINE_STD  = 1, //!< Standard refinement is applied. E.g. breaking arches into smaller straighter line approximations.
     LSD_REFINE_ADV  = 2  //!< Advanced refinement. Number of false alarms is calculated, lines are
                          //!< refined through increase of precision, decrement in size, etc.
 };
+
+//! @} imgproc_feature
 
 /** Histogram comparison methods
   @ingroup imgproc_hist
@@ -508,9 +518,9 @@ enum HistCompMethods {
     HISTCMP_KL_DIV        = 5
 };
 
-/** the color conversion code
+/** the color conversion codes
 @see @ref imgproc_color_conversions
-@ingroup imgproc_misc
+@ingroup imgproc_color_conversions
  */
 enum ColorConversionCodes {
     COLOR_BGR2BGRA     = 0, //!< add alpha channel to RGB or BGR image
@@ -595,7 +605,7 @@ enum ColorConversionCodes {
     COLOR_HLS2BGR      = 60,
     COLOR_HLS2RGB      = 61,
 
-    COLOR_BGR2HSV_FULL = 66, //!<
+    COLOR_BGR2HSV_FULL = 66,
     COLOR_RGB2HSV_FULL = 67,
     COLOR_BGR2HLS_FULL = 68,
     COLOR_RGB2HLS_FULL = 69,
@@ -779,124 +789,135 @@ enum ColorConversionCodes {
     COLOR_COLORCVT_MAX  = 143
 };
 
-/** types of intersection between rectangles
-@ingroup imgproc_shape
-*/
+//! @addtogroup imgproc_shape
+//! @{
+
+//! types of intersection between rectangles
 enum RectanglesIntersectTypes {
     INTERSECT_NONE = 0, //!< No intersection
     INTERSECT_PARTIAL  = 1, //!< There is a partial intersection
     INTERSECT_FULL  = 2 //!< One of the rectangle is fully enclosed in the other
 };
 
-//! finds arbitrary template in the grayscale image using Generalized Hough Transform
-class CV_EXPORTS GeneralizedHough : public Algorithm
+/** @brief finds arbitrary template in the grayscale image using Generalized Hough Transform
+*/
+class CV_EXPORTS_W GeneralizedHough : public Algorithm
 {
 public:
     //! set template to search
-    virtual void setTemplate(InputArray templ, Point templCenter = Point(-1, -1)) = 0;
-    virtual void setTemplate(InputArray edges, InputArray dx, InputArray dy, Point templCenter = Point(-1, -1)) = 0;
+    CV_WRAP virtual void setTemplate(InputArray templ, Point templCenter = Point(-1, -1)) = 0;
+    CV_WRAP virtual void setTemplate(InputArray edges, InputArray dx, InputArray dy, Point templCenter = Point(-1, -1)) = 0;
 
     //! find template on image
-    virtual void detect(InputArray image, OutputArray positions, OutputArray votes = noArray()) = 0;
-    virtual void detect(InputArray edges, InputArray dx, InputArray dy, OutputArray positions, OutputArray votes = noArray()) = 0;
+    CV_WRAP virtual void detect(InputArray image, OutputArray positions, OutputArray votes = noArray()) = 0;
+    CV_WRAP virtual void detect(InputArray edges, InputArray dx, InputArray dy, OutputArray positions, OutputArray votes = noArray()) = 0;
 
     //! Canny low threshold.
-    virtual void setCannyLowThresh(int cannyLowThresh) = 0;
-    virtual int getCannyLowThresh() const = 0;
+    CV_WRAP virtual void setCannyLowThresh(int cannyLowThresh) = 0;
+    CV_WRAP virtual int getCannyLowThresh() const = 0;
 
     //! Canny high threshold.
-    virtual void setCannyHighThresh(int cannyHighThresh) = 0;
-    virtual int getCannyHighThresh() const = 0;
+    CV_WRAP virtual void setCannyHighThresh(int cannyHighThresh) = 0;
+    CV_WRAP virtual int getCannyHighThresh() const = 0;
 
     //! Minimum distance between the centers of the detected objects.
-    virtual void setMinDist(double minDist) = 0;
-    virtual double getMinDist() const = 0;
+    CV_WRAP virtual void setMinDist(double minDist) = 0;
+    CV_WRAP virtual double getMinDist() const = 0;
 
     //! Inverse ratio of the accumulator resolution to the image resolution.
-    virtual void setDp(double dp) = 0;
-    virtual double getDp() const = 0;
+    CV_WRAP virtual void setDp(double dp) = 0;
+    CV_WRAP virtual double getDp() const = 0;
 
     //! Maximal size of inner buffers.
-    virtual void setMaxBufferSize(int maxBufferSize) = 0;
-    virtual int getMaxBufferSize() const = 0;
+    CV_WRAP virtual void setMaxBufferSize(int maxBufferSize) = 0;
+    CV_WRAP virtual int getMaxBufferSize() const = 0;
 };
 
-//! Ballard, D.H. (1981). Generalizing the Hough transform to detect arbitrary shapes. Pattern Recognition 13 (2): 111-122.
-//! Detects position only without translation and rotation
-class CV_EXPORTS GeneralizedHoughBallard : public GeneralizedHough
+/** @brief finds arbitrary template in the grayscale image using Generalized Hough Transform
+
+Detects position only without translation and rotation @cite Ballard1981 .
+*/
+class CV_EXPORTS_W GeneralizedHoughBallard : public GeneralizedHough
 {
 public:
     //! R-Table levels.
-    virtual void setLevels(int levels) = 0;
-    virtual int getLevels() const = 0;
+    CV_WRAP virtual void setLevels(int levels) = 0;
+    CV_WRAP virtual int getLevels() const = 0;
 
     //! The accumulator threshold for the template centers at the detection stage. The smaller it is, the more false positions may be detected.
-    virtual void setVotesThreshold(int votesThreshold) = 0;
-    virtual int getVotesThreshold() const = 0;
+    CV_WRAP virtual void setVotesThreshold(int votesThreshold) = 0;
+    CV_WRAP virtual int getVotesThreshold() const = 0;
 };
 
-//! Guil, N., González-Linares, J.M. and Zapata, E.L. (1999). Bidimensional shape detection using an invariant approach. Pattern Recognition 32 (6): 1025-1038.
-//! Detects position, translation and rotation
-class CV_EXPORTS GeneralizedHoughGuil : public GeneralizedHough
+/** @brief finds arbitrary template in the grayscale image using Generalized Hough Transform
+
+Detects position, translation and rotation @cite Guil1999 .
+*/
+class CV_EXPORTS_W GeneralizedHoughGuil : public GeneralizedHough
 {
 public:
     //! Angle difference in degrees between two points in feature.
-    virtual void setXi(double xi) = 0;
-    virtual double getXi() const = 0;
+    CV_WRAP virtual void setXi(double xi) = 0;
+    CV_WRAP virtual double getXi() const = 0;
 
     //! Feature table levels.
-    virtual void setLevels(int levels) = 0;
-    virtual int getLevels() const = 0;
+    CV_WRAP virtual void setLevels(int levels) = 0;
+    CV_WRAP virtual int getLevels() const = 0;
 
     //! Maximal difference between angles that treated as equal.
-    virtual void setAngleEpsilon(double angleEpsilon) = 0;
-    virtual double getAngleEpsilon() const = 0;
+    CV_WRAP virtual void setAngleEpsilon(double angleEpsilon) = 0;
+    CV_WRAP virtual double getAngleEpsilon() const = 0;
 
     //! Minimal rotation angle to detect in degrees.
-    virtual void setMinAngle(double minAngle) = 0;
-    virtual double getMinAngle() const = 0;
+    CV_WRAP virtual void setMinAngle(double minAngle) = 0;
+    CV_WRAP virtual double getMinAngle() const = 0;
 
     //! Maximal rotation angle to detect in degrees.
-    virtual void setMaxAngle(double maxAngle) = 0;
-    virtual double getMaxAngle() const = 0;
+    CV_WRAP virtual void setMaxAngle(double maxAngle) = 0;
+    CV_WRAP virtual double getMaxAngle() const = 0;
 
     //! Angle step in degrees.
-    virtual void setAngleStep(double angleStep) = 0;
-    virtual double getAngleStep() const = 0;
+    CV_WRAP virtual void setAngleStep(double angleStep) = 0;
+    CV_WRAP virtual double getAngleStep() const = 0;
 
     //! Angle votes threshold.
-    virtual void setAngleThresh(int angleThresh) = 0;
-    virtual int getAngleThresh() const = 0;
+    CV_WRAP virtual void setAngleThresh(int angleThresh) = 0;
+    CV_WRAP virtual int getAngleThresh() const = 0;
 
     //! Minimal scale to detect.
-    virtual void setMinScale(double minScale) = 0;
-    virtual double getMinScale() const = 0;
+    CV_WRAP virtual void setMinScale(double minScale) = 0;
+    CV_WRAP virtual double getMinScale() const = 0;
 
     //! Maximal scale to detect.
-    virtual void setMaxScale(double maxScale) = 0;
-    virtual double getMaxScale() const = 0;
+    CV_WRAP virtual void setMaxScale(double maxScale) = 0;
+    CV_WRAP virtual double getMaxScale() const = 0;
 
     //! Scale step.
-    virtual void setScaleStep(double scaleStep) = 0;
-    virtual double getScaleStep() const = 0;
+    CV_WRAP virtual void setScaleStep(double scaleStep) = 0;
+    CV_WRAP virtual double getScaleStep() const = 0;
 
     //! Scale votes threshold.
-    virtual void setScaleThresh(int scaleThresh) = 0;
-    virtual int getScaleThresh() const = 0;
+    CV_WRAP virtual void setScaleThresh(int scaleThresh) = 0;
+    CV_WRAP virtual int getScaleThresh() const = 0;
 
     //! Position votes threshold.
-    virtual void setPosThresh(int posThresh) = 0;
-    virtual int getPosThresh() const = 0;
+    CV_WRAP virtual void setPosThresh(int posThresh) = 0;
+    CV_WRAP virtual int getPosThresh() const = 0;
 };
 
-/** @brief Base class for Contrast Limited Adaptive Histogram Equalization. :
- */
+//! @} imgproc_shape
+
+//! @addtogroup imgproc_hist
+//! @{
+
+/** @brief Base class for Contrast Limited Adaptive Histogram Equalization.
+*/
 class CV_EXPORTS_W CLAHE : public Algorithm
 {
 public:
     /** @brief Equalizes the histogram of a grayscale image using Contrast Limited Adaptive Histogram Equalization.
 
-    @param src Source image with CV_8UC1 type.
+    @param src Source image of type CV_8UC1 or CV_16UC1.
     @param dst Destination image.
      */
     CV_WRAP virtual void apply(InputArray src, OutputArray dst) = 0;
@@ -923,6 +944,7 @@ public:
     CV_WRAP virtual void collectGarbage() = 0;
 };
 
+//! @} imgproc_hist
 
 //! @addtogroup imgproc_subdiv2d
 //! @{
@@ -1191,14 +1213,12 @@ protected:
 //! @addtogroup imgproc_feature
 //! @{
 
-/** @example lsd_lines.cpp
-An example using the LineSegmentDetector
-\image html building_lsd.png "Sample output image" width=434 height=300
-*/
-
 /** @brief Line segment detector class
 
 following the algorithm described at @cite Rafael12 .
+
+@note Implementation has been removed due original code license conflict
+
 */
 class CV_EXPORTS_W LineSegmentDetector : public Algorithm
 {
@@ -1262,6 +1282,8 @@ to edit those, as to tailor it for their own application.
 is chosen.
 @param _density_th Minimal density of aligned region points in the enclosing rectangle.
 @param _n_bins Number of bins in pseudo-ordering of gradient modulus.
+
+@note Implementation has been removed due original code license conflict
  */
 CV_EXPORTS_W Ptr<LineSegmentDetector> createLineSegmentDetector(
     int _refine = LSD_REFINE_STD, double _scale = 0.8,
@@ -1349,11 +1371,12 @@ operation is shifted.
  */
 CV_EXPORTS_W Mat getStructuringElement(int shape, Size ksize, Point anchor = Point(-1,-1));
 
-/** @example Smoothing.cpp
+/** @example samples/cpp/tutorial_code/ImgProc/Smoothing/Smoothing.cpp
 Sample code for simple filters
 ![Sample screenshot](Smoothing_Tutorial_Result_Median_Filter.jpg)
 Check @ref tutorial_gausian_median_blur_bilateral_filter "the corresponding tutorial" for more details
  */
+
 /** @brief Blurs an image using the median filter.
 
 The function smoothes an image using the median filter with the \f$\texttt{ksize} \times
@@ -1463,8 +1486,8 @@ pixel values which overlap the filter placed over the pixel \f$ (x, y) \f$.
 The unnormalized square box filter can be useful in computing local image statistics such as the the local
 variance and standard deviation around the neighborhood of a pixel.
 
-@param _src input image
-@param _dst output image of the same size and type as _src
+@param src input image
+@param dst output image of the same size and type as _src
 @param ddepth the output image depth (-1 to use src.depth())
 @param ksize kernel size
 @param anchor kernel anchor point. The default value of Point(-1, -1) denotes that the anchor is at the kernel
@@ -1473,7 +1496,7 @@ center.
 @param borderType border mode used to extrapolate pixels outside of the image, see #BorderTypes
 @sa boxFilter
 */
-CV_EXPORTS_W void sqrBoxFilter( InputArray _src, OutputArray _dst, int ddepth,
+CV_EXPORTS_W void sqrBoxFilter( InputArray src, OutputArray dst, int ddepth,
                                 Size ksize, Point anchor = Point(-1, -1),
                                 bool normalize = true,
                                 int borderType = BORDER_DEFAULT );
@@ -1556,11 +1579,12 @@ CV_EXPORTS_W void sepFilter2D( InputArray src, OutputArray dst, int ddepth,
                                Point anchor = Point(-1,-1),
                                double delta = 0, int borderType = BORDER_DEFAULT );
 
-/** @example Sobel_Demo.cpp
+/** @example samples/cpp/tutorial_code/ImgTrans/Sobel_Demo.cpp
 Sample code using Sobel and/or Scharr OpenCV functions to make a simple Edge Detector
 ![Sample screenshot](Sobel_Derivatives_Tutorial_Result.jpg)
 Check @ref tutorial_sobel_derivatives "the corresponding tutorial" for more details
- */
+*/
+
 /** @brief Calculates the first, second, third, or mixed image derivatives using an extended Sobel operator.
 
 In all cases except one, the \f$\texttt{ksize} \times \texttt{ksize}\f$ separable kernel is used to
@@ -1656,8 +1680,8 @@ CV_EXPORTS_W void Scharr( InputArray src, OutputArray dst, int ddepth,
                           int dx, int dy, double scale = 1, double delta = 0,
                           int borderType = BORDER_DEFAULT );
 
-/** @example laplace.cpp
-  An example using Laplace transformations for edge detection
+/** @example samples/cpp/laplace.cpp
+An example using Laplace transformations for edge detection
 */
 
 /** @brief Calculates the Laplacian of an image.
@@ -1692,10 +1716,10 @@ CV_EXPORTS_W void Laplacian( InputArray src, OutputArray dst, int ddepth,
 //! @addtogroup imgproc_feature
 //! @{
 
-/** @example edge.cpp
-  This program demonstrates usage of the Canny edge detector
+/** @example samples/cpp/edge.cpp
+This program demonstrates usage of the Canny edge detector
 
-  Check @ref tutorial_canny_detector "the corresponding tutorial" for more details
+Check @ref tutorial_canny_detector "the corresponding tutorial" for more details
 */
 
 /** @brief Finds edges in an image using the Canny algorithm @cite Canny86 .
@@ -1851,7 +1875,7 @@ where \f${DI_{p_i}}\f$ is an image gradient at one of the points \f$p_i\f$ in a 
 value of \f$q\f$ is to be found so that \f$\epsilon_i\f$ is minimized. A system of equations may be set up
 with \f$\epsilon_i\f$ set to zero:
 
-\f[\sum _i(DI_{p_i}  \cdot {DI_{p_i}}^T) -  \sum _i(DI_{p_i}  \cdot {DI_{p_i}}^T  \cdot p_i)\f]
+\f[\sum _i(DI_{p_i}  \cdot {DI_{p_i}}^T) \cdot q -  \sum _i(DI_{p_i}  \cdot {DI_{p_i}}^T  \cdot p_i)\f]
 
 where the gradients are summed within a neighborhood ("search window") of \f$q\f$ . Calling the first
 gradient term \f$G\f$ and the second gradient term \f$b\f$ gives:
@@ -1861,11 +1885,11 @@ gradient term \f$G\f$ and the second gradient term \f$b\f$ gives:
 The algorithm sets the center of the neighborhood window at this new center \f$q\f$ and then iterates
 until the center stays within a set threshold.
 
-@param image Input image.
+@param image Input single-channel, 8-bit or float image.
 @param corners Initial coordinates of the input corners and refined coordinates provided for
 output.
 @param winSize Half of the side length of the search window. For example, if winSize=Size(5,5) ,
-then a \f$5*2+1 \times 5*2+1 = 11 \times 11\f$ search window is used.
+then a \f$(5*2+1) \times (5*2+1) = 11 \times 11\f$ search window is used.
 @param zeroZone Half of the size of the dead region in the middle of the search zone over which
 the summation in the formula below is not done. It is used sometimes to avoid possible
 singularities of the autocorrelation matrix. The value of (-1,-1) indicates that there is no such
@@ -1932,7 +1956,7 @@ CV_EXPORTS_W void goodFeaturesToTrack( InputArray image, OutputArray corners,
                                      InputArray mask, int blockSize,
                                      int gradientSize, bool useHarrisDetector = false,
                                      double k = 0.04 );
-/** @example houghlines.cpp
+/** @example samples/cpp/tutorial_code/ImgTrans/houghlines.cpp
 An example using the Hough line detector
 ![Sample input image](Hough_Lines_Tutorial_Original_Image.jpg) ![Output image](Hough_Lines_Tutorial_Result.jpg)
 */
@@ -1945,10 +1969,10 @@ transform.
 
 @param image 8-bit, single-channel binary source image. The image may be modified by the function.
 @param lines Output vector of lines. Each line is represented by a 2 or 3 element vector
-\f$(\rho, \theta)\f$ or \f$(\rho, \theta, \votes)\f$ . \f$\rho\f$ is the distance from the coordinate origin \f$(0,0)\f$ (top-left corner of
+\f$(\rho, \theta)\f$ or \f$(\rho, \theta, \textrm{votes})\f$ . \f$\rho\f$ is the distance from the coordinate origin \f$(0,0)\f$ (top-left corner of
 the image). \f$\theta\f$ is the line rotation angle in radians (
 \f$0 \sim \textrm{vertical line}, \pi/2 \sim \textrm{horizontal line}\f$ ).
-\f$\votes\f$ is the value of accumulator.
+\f$\textrm{votes}\f$ is the value of accumulator.
 @param rho Distance resolution of the accumulator in pixels.
 @param theta Angle resolution of the accumulator in radians.
 @param threshold Accumulator threshold parameter. Only those lines are returned that get enough
@@ -2021,7 +2045,7 @@ CV_EXPORTS_W void HoughLinesPointSet( InputArray _point, OutputArray _lines, int
                                       double min_rho, double max_rho, double rho_step,
                                       double min_theta, double max_theta, double theta_step );
 
-/** @example houghcircles.cpp
+/** @example samples/cpp/tutorial_code/ImgTrans/houghcircles.cpp
 An example using the Hough circle detector
 */
 
@@ -2069,7 +2093,7 @@ CV_EXPORTS_W void HoughCircles( InputArray image, OutputArray circles,
 //! @addtogroup imgproc_filter
 //! @{
 
-/** @example morphology2.cpp
+/** @example samples/cpp/tutorial_code/ImgProc/Morphology_2.cpp
 Advanced morphology Transformations sample code
 ![Sample screenshot](Morphology_2_Tutorial_Result.jpg)
 Check @ref tutorial_opening_closing_hats "the corresponding tutorial" for more details
@@ -2102,11 +2126,12 @@ CV_EXPORTS_W void erode( InputArray src, OutputArray dst, InputArray kernel,
                          int borderType = BORDER_CONSTANT,
                          const Scalar& borderValue = morphologyDefaultBorderValue() );
 
-/** @example Morphology_1.cpp
+/** @example samples/cpp/tutorial_code/ImgProc/Morphology_1.cpp
 Erosion and Dilation sample code
 ![Sample Screenshot-Erosion](Morphology_1_Tutorial_Erosion_Result.jpg)![Sample Screenshot-Dilation](Morphology_1_Tutorial_Dilation_Result.jpg)
 Check @ref tutorial_erosion_dilatation "the corresponding tutorial" for more details
- */
+*/
+
 /** @brief Dilates an image by using a specific structuring element.
 
 The function dilates the source image using the specified structuring element that determines the
@@ -2236,9 +2261,10 @@ CV_EXPORTS_W void warpAffine( InputArray src, OutputArray dst,
                               int borderMode = BORDER_CONSTANT,
                               const Scalar& borderValue = Scalar());
 
-/** @example warpPerspective_demo.cpp
+/** @example samples/cpp/warpPerspective_demo.cpp
 An example program shows using cv::findHomography and cv::warpPerspective for image warping
- */
+*/
+
 /** @brief Applies a perspective transformation to an image.
 
 The function warpPerspective transforms the source image using the specified matrix:
@@ -2436,7 +2462,7 @@ source image. The center must be inside the image.
 CV_EXPORTS_W void getRectSubPix( InputArray image, Size patchSize,
                                  Point2f center, OutputArray patch, int patchType = -1 );
 
-/** @example polar_transforms.cpp
+/** @example samples/cpp/polar_transforms.cpp
 An example using the cv::linearPolar and cv::logPolar operations
 */
 
@@ -2871,9 +2897,10 @@ CV_EXPORTS_W void adaptiveThreshold( InputArray src, OutputArray dst,
 //! @addtogroup imgproc_filter
 //! @{
 
-/** @example Pyramids.cpp
+/** @example samples/cpp/tutorial_code/ImgProc/Pyramids/Pyramids.cpp
 An example using pyrDown and pyrUp functions
- */
+*/
+
 /** @brief Blurs an image and downsamples it.
 
 By default, size of the output image is computed as `Size((src.cols+1)/2, (src.rows+1)/2)`, but in
@@ -3093,9 +3120,9 @@ point coordinates out of the normalized distorted point coordinates ("normalized
 coordinates do not depend on the camera matrix).
 
 The function can be used for both a stereo camera head or a monocular camera (when R is empty).
-
-@param src Observed point coordinates, 1xN or Nx1 2-channel (CV_32FC2 or CV_64FC2).
-@param dst Output ideal point coordinates after undistortion and reverse perspective
+@param src Observed point coordinates, 2xN/Nx2 1-channel or 1xN/Nx1 2-channel (CV_32FC2 or CV_64FC2) (or
+vector\<Point2f\> ).
+@param dst Output ideal point coordinates (1xN/Nx1 2-channel or vector\<Point2f\> ) after undistortion and reverse perspective
 transformation. If matrix P is identity or omitted, dst will contain normalized point coordinates.
 @param cameraMatrix Camera matrix \f$\vecthreethree{f_x}{0}{c_x}{0}{f_y}{c_y}{0}{0}{1}\f$ .
 @param distCoeffs Input vector of distortion coefficients
@@ -3108,21 +3135,21 @@ of 4, 5, 8, 12 or 14 elements. If the vector is NULL/empty, the zero distortion 
  */
 CV_EXPORTS_W void undistortPoints( InputArray src, OutputArray dst,
                                    InputArray cameraMatrix, InputArray distCoeffs,
-                                   InputArray R = noArray(), InputArray P = noArray());
+                                   InputArray R = noArray(), InputArray P = noArray() );
 /** @overload
     @note Default version of #undistortPoints does 5 iterations to compute undistorted points.
 
  */
 CV_EXPORTS_AS(undistortPointsIter) void undistortPoints( InputArray src, OutputArray dst,
-                                   InputArray cameraMatrix, InputArray distCoeffs,
-                                   InputArray R, InputArray P, TermCriteria criteria);
+                                                         InputArray cameraMatrix, InputArray distCoeffs,
+                                                         InputArray R, InputArray P, TermCriteria criteria );
 
 //! @} imgproc_transform
 
 //! @addtogroup imgproc_hist
 //! @{
 
-/** @example demhist.cpp
+/** @example samples/cpp/demhist.cpp
 An example for creating histograms of an image
 */
 
@@ -3275,6 +3302,14 @@ The algorithm normalizes the brightness and increases the contrast of the image.
  */
 CV_EXPORTS_W void equalizeHist( InputArray src, OutputArray dst );
 
+/** @brief Creates a smart pointer to a cv::CLAHE class and initializes it.
+
+@param clipLimit Threshold for contrast limiting.
+@param tileGridSize Size of grid for histogram equalization. Input image will be divided into
+equally sized rectangular tiles. tileGridSize defines the number of tiles in row and column.
+ */
+CV_EXPORTS_W Ptr<CLAHE> createCLAHE(double clipLimit = 40.0, Size tileGridSize = Size(8, 8));
+
 /** @brief Computes the "minimal work" distance between two weighted point configurations.
 
 The function computes the earth mover distance and/or a lower boundary of the distance between the
@@ -3319,9 +3354,9 @@ CV_EXPORTS_AS(EMD) float wrapperEMD( InputArray signature1, InputArray signature
 
 //! @} imgproc_hist
 
-/** @example watershed.cpp
+/** @example samples/cpp/watershed.cpp
 An example using the watershed algorithm
- */
+*/
 
 /** @brief Performs a marker-based image segmentation using the watershed algorithm.
 
@@ -3399,10 +3434,10 @@ CV_EXPORTS_W void pyrMeanShiftFiltering( InputArray src, OutputArray dst,
 //! @addtogroup imgproc_misc
 //! @{
 
-/** @example grabcut.cpp
+/** @example samples/cpp/grabcut.cpp
 An example using the GrabCut algorithm
 ![Sample Screenshot](grabcut_output1.jpg)
- */
+*/
 
 /** @brief Runs the GrabCut algorithm.
 
@@ -3426,10 +3461,9 @@ CV_EXPORTS_W void grabCut( InputArray img, InputOutputArray mask, Rect rect,
                            InputOutputArray bgdModel, InputOutputArray fgdModel,
                            int iterCount, int mode = GC_EVAL );
 
-/** @example distrans.cpp
-An example on using the distance transform\
+/** @example samples/cpp/distrans.cpp
+An example on using the distance transform
 */
-
 
 /** @brief Calculates the distance to the closest zero pixel for each pixel of the source image.
 
@@ -3502,8 +3536,8 @@ the first variant of the function and distanceType == #DIST_L1.
 CV_EXPORTS_W void distanceTransform( InputArray src, OutputArray dst,
                                      int distanceType, int maskSize, int dstType=CV_32F);
 
-/** @example ffilldemo.cpp
-  An example using the FloodFill technique
+/** @example samples/cpp/ffilldemo.cpp
+An example using the FloodFill technique
 */
 
 /** @overload
@@ -3591,6 +3625,20 @@ CV_EXPORTS_W int floodFill( InputOutputArray image, InputOutputArray mask,
                             Scalar loDiff = Scalar(), Scalar upDiff = Scalar(),
                             int flags = 4 );
 
+//! Performs linear blending of two images:
+//! \f[ \texttt{dst}(i,j) = \texttt{weights1}(i,j)*\texttt{src1}(i,j) + \texttt{weights2}(i,j)*\texttt{src2}(i,j) \f]
+//! @param src1 It has a type of CV_8UC(n) or CV_32FC(n), where n is a positive integer.
+//! @param src2 It has the same type and size as src1.
+//! @param weights1 It has a type of CV_32FC1 and the same size with src1.
+//! @param weights2 It has a type of CV_32FC1 and the same size with src1.
+//! @param dst It is created if it does not have the same size and type with src1.
+CV_EXPORTS void blendLinear(InputArray src1, InputArray src2, InputArray weights1, InputArray weights2, OutputArray dst);
+
+//! @} imgproc_misc
+
+//! @addtogroup imgproc_color_conversions
+//! @{
+
 /** @brief Converts an image from one color space to another.
 
 The function converts an input image from one color space to another. In case of a transformation
@@ -3634,12 +3682,59 @@ channels is derived automatically from src and code.
  */
 CV_EXPORTS_W void cvtColor( InputArray src, OutputArray dst, int code, int dstCn = 0 );
 
+/** @brief Converts an image from one color space to another where the source image is
+stored in two planes.
+
+This function only supports YUV420 to RGB conversion as of now.
+
+@param src1: 8-bit image (#CV_8U) of the Y plane.
+@param src2: image containing interleaved U/V plane.
+@param dst: output image.
+@param code: Specifies the type of conversion. It can take any of the following values:
+- #COLOR_YUV2BGR_NV12
+- #COLOR_YUV2RGB_NV12
+- #COLOR_YUV2BGRA_NV12
+- #COLOR_YUV2RGBA_NV12
+- #COLOR_YUV2BGR_NV21
+- #COLOR_YUV2RGB_NV21
+- #COLOR_YUV2BGRA_NV21
+- #COLOR_YUV2RGBA_NV21
+*/
 CV_EXPORTS_W void cvtColorTwoPlane( InputArray src1, InputArray src2, OutputArray dst, int code );
 
-//! @} imgproc_misc
+/** @brief main function for all demosaicing processes
 
-// main function for all demosaicing processes
-CV_EXPORTS_W void demosaicing(InputArray _src, OutputArray _dst, int code, int dcn = 0);
+@param src input image: 8-bit unsigned or 16-bit unsigned.
+@param dst output image of the same size and depth as src.
+@param code Color space conversion code (see the description below).
+@param dstCn number of channels in the destination image; if the parameter is 0, the number of the
+channels is derived automatically from src and code.
+
+The function can do the following transformations:
+
+-   Demosaicing using bilinear interpolation
+
+    #COLOR_BayerBG2BGR , #COLOR_BayerGB2BGR , #COLOR_BayerRG2BGR , #COLOR_BayerGR2BGR
+
+    #COLOR_BayerBG2GRAY , #COLOR_BayerGB2GRAY , #COLOR_BayerRG2GRAY , #COLOR_BayerGR2GRAY
+
+-   Demosaicing using Variable Number of Gradients.
+
+    #COLOR_BayerBG2BGR_VNG , #COLOR_BayerGB2BGR_VNG , #COLOR_BayerRG2BGR_VNG , #COLOR_BayerGR2BGR_VNG
+
+-   Edge-Aware Demosaicing.
+
+    #COLOR_BayerBG2BGR_EA , #COLOR_BayerGB2BGR_EA , #COLOR_BayerRG2BGR_EA , #COLOR_BayerGR2BGR_EA
+
+-   Demosaicing with alpha channel
+
+    #COLOR_BayerBG2BGRA , #COLOR_BayerGB2BGRA , #COLOR_BayerRG2BGRA , #COLOR_BayerGR2BGRA
+
+@sa cvtColor
+*/
+CV_EXPORTS_W void demosaicing(InputArray src, OutputArray dst, int code, int dstCn = 0);
+
+//! @} imgproc_color_conversions
 
 //! @addtogroup imgproc_shape
 //! @{
@@ -3703,9 +3798,10 @@ enum TemplateMatchModes {
     TM_CCOEFF_NORMED = 5  //!< \f[R(x,y)= \frac{ \sum_{x',y'} (T'(x',y') \cdot I'(x+x',y+y')) }{ \sqrt{\sum_{x',y'}T'(x',y')^2 \cdot \sum_{x',y'} I'(x+x',y+y')^2} }\f]
 };
 
-/** @example MatchTemplate_Demo.cpp
+/** @example samples/cpp/tutorial_code/Histograms_Matching/MatchTemplate_Demo.cpp
 An example using Template Matching algorithm
- */
+*/
+
 /** @brief Compares a template against overlapped image regions.
 
 The function slides through image , compares the overlapped patches of size \f$w \times h\f$ against
@@ -3736,6 +3832,10 @@ CV_EXPORTS_W void matchTemplate( InputArray image, InputArray templ,
 
 //! @addtogroup imgproc_shape
 //! @{
+
+/** @example samples/cpp/connected_components.cpp
+This program demonstrates connected components and use of the trackbar
+*/
 
 /** @brief computes the connected components labeled image of boolean image
 
@@ -3844,6 +3944,16 @@ CV_EXPORTS_W void findContours( InputOutputArray image, OutputArrayOfArrays cont
 CV_EXPORTS void findContours( InputOutputArray image, OutputArrayOfArrays contours,
                               int mode, int method, Point offset = Point());
 
+/** @example samples/cpp/squares.cpp
+A program using pyramid scaling, Canny, contours and contour simplification to find
+squares in a list of images (pic1-6.png). Returns sequence of squares detected on the image.
+*/
+
+/** @example samples/tapi/squares.cpp
+A program using pyramid scaling, Canny, contours and contour simplification to find
+squares in the input image.
+*/
+
 /** @brief Approximates a polygonal curve(s) with the specified precision.
 
 The function cv::approxPolyDP approximates a curve or a polygon with another curve/polygon with less
@@ -3870,13 +3980,14 @@ The function computes a curve length or a closed contour perimeter.
  */
 CV_EXPORTS_W double arcLength( InputArray curve, bool closed );
 
-/** @brief Calculates the up-right bounding rectangle of a point set.
+/** @brief Calculates the up-right bounding rectangle of a point set or non-zero pixels of gray-scale image.
 
-The function calculates and returns the minimal up-right bounding rectangle for the specified point set.
+The function calculates and returns the minimal up-right bounding rectangle for the specified point set or
+non-zero pixels of gray-scale image.
 
-@param points Input 2D point set, stored in std::vector or Mat.
+@param array Input gray-scale image or 2D point set, stored in std::vector or Mat.
  */
-CV_EXPORTS_W Rect boundingRect( InputArray points );
+CV_EXPORTS_W Rect boundingRect( InputArray array );
 
 /** @brief Calculates a contour area.
 
@@ -3942,8 +4053,8 @@ The function finds the minimal enclosing circle of a 2D point set using an itera
 CV_EXPORTS_W void minEnclosingCircle( InputArray points,
                                       CV_OUT Point2f& center, CV_OUT float& radius );
 
-/** @example minarea.cpp
-  */
+/** @example samples/cpp/minarea.cpp
+*/
 
 /** @brief Finds a triangle of minimum area enclosing a 2D point set and returns its area.
 
@@ -3978,7 +4089,7 @@ The function compares two shapes. All three implemented methods use the Hu invar
 CV_EXPORTS_W double matchShapes( InputArray contour1, InputArray contour2,
                                  int method, double parameter );
 
-/** @example convexhull.cpp
+/** @example samples/cpp/convexhull.cpp
 An example using the convexHull functionality
 */
 
@@ -4002,6 +4113,12 @@ vector: std::vector\<int\> implies returnPoints=false, std::vector\<Point\> impl
 returnPoints=true.
 
 @note `points` and `hull` should be different arrays, inplace processing isn't supported.
+
+Check @ref tutorial_hull "the corresponding tutorial" for more details.
+
+useful links:
+
+https://www.learnopencv.com/convex-hull-using-opencv-in-python-and-c/
  */
 CV_EXPORTS_W void convexHull( InputArray points, OutputArray hull,
                               bool clockwise = false, bool returnPoints = true );
@@ -4034,12 +4151,28 @@ without self-intersections. Otherwise, the function output is undefined.
  */
 CV_EXPORTS_W bool isContourConvex( InputArray contour );
 
-//! finds intersection of two convex polygons
+/** @example samples/cpp/intersectExample.cpp
+Examples of how intersectConvexConvex works
+*/
+
+/** @brief Finds intersection of two convex polygons
+
+@param _p1 First polygon
+@param _p2 Second polygon
+@param _p12 Output polygon describing the intersecting area
+@param handleNested When true, an intersection is found if one of the polygons is fully enclosed in the other.
+When false, no intersection is found. If the polygons share a side or the vertex of one polygon lies on an edge
+of the other, they are not considered nested and an intersection will be found regardless of the value of handleNested.
+
+@returns Absolute value of area of intersecting polygon
+
+@note intersectConvexConvex doesn't confirm that both polygons are convex and will return invalid results if they aren't.
+ */
 CV_EXPORTS_W float intersectConvexConvex( InputArray _p1, InputArray _p2,
                                           OutputArray _p12, bool handleNested = true );
 
-/** @example fitellipse.cpp
-  An example using the fitEllipse technique
+/** @example samples/cpp/fitellipse.cpp
+An example using the fitEllipse technique
 */
 
 /** @brief Fits an ellipse around a set of 2D points.
@@ -4208,31 +4341,15 @@ at most 8 vertices. Stored as std::vector\<cv::Point2f\> or cv::Mat as Mx1 of ty
  */
 CV_EXPORTS_W int rotatedRectangleIntersection( const RotatedRect& rect1, const RotatedRect& rect2, OutputArray intersectingRegion  );
 
+/** @brief Creates a smart pointer to a cv::GeneralizedHoughBallard class and initializes it.
+*/
+CV_EXPORTS_W Ptr<GeneralizedHoughBallard> createGeneralizedHoughBallard();
+
+/** @brief Creates a smart pointer to a cv::GeneralizedHoughGuil class and initializes it.
+*/
+CV_EXPORTS_W Ptr<GeneralizedHoughGuil> createGeneralizedHoughGuil();
+
 //! @} imgproc_shape
-/** @brief Creates implementation for cv::CLAHE .
-
-@param clipLimit Threshold for contrast limiting.
-@param tileGridSize Size of grid for histogram equalization. Input image will be divided into
-equally sized rectangular tiles. tileGridSize defines the number of tiles in row and column.
- */
-CV_EXPORTS_W Ptr<CLAHE> createCLAHE(double clipLimit = 40.0, Size tileGridSize = Size(8, 8));
-
-//! Ballard, D.H. (1981). Generalizing the Hough transform to detect arbitrary shapes. Pattern Recognition 13 (2): 111-122.
-//! Detects position only without translation and rotation
-CV_EXPORTS Ptr<GeneralizedHoughBallard> createGeneralizedHoughBallard();
-
-//! Guil, N., González-Linares, J.M. and Zapata, E.L. (1999). Bidimensional shape detection using an invariant approach. Pattern Recognition 32 (6): 1025-1038.
-//! Detects position, translation and rotation
-CV_EXPORTS Ptr<GeneralizedHoughGuil> createGeneralizedHoughGuil();
-
-//! Performs linear blending of two images:
-//! \f[ \texttt{dst}(i,j) = \texttt{weights1}(i,j)*\texttt{src1}(i,j) + \texttt{weights2}(i,j)*\texttt{src2}(i,j) \f]
-//! @param src1 It has a type of CV_8UC(n) or CV_32FC(n), where n is a positive integer.
-//! @param src2 It has the same type and size as src1.
-//! @param weights1 It has a type of CV_32FC1 and the same size with src1.
-//! @param weights2 It has a type of CV_32FC1 and the same size with src1.
-//! @param dst It is created if it does not have the same size and type with src1.
-CV_EXPORTS void blendLinear(InputArray src1, InputArray src2, InputArray weights1, InputArray weights2, OutputArray dst);
 
 //! @addtogroup imgproc_colormap
 //! @{
@@ -4252,12 +4369,21 @@ enum ColormapTypes
     COLORMAP_HSV = 9, //!< ![HSV](pics/colormaps/colorscale_hsv.jpg)
     COLORMAP_PINK = 10, //!< ![pink](pics/colormaps/colorscale_pink.jpg)
     COLORMAP_HOT = 11, //!< ![hot](pics/colormaps/colorscale_hot.jpg)
-    COLORMAP_PARULA = 12 //!< ![parula](pics/colormaps/colorscale_parula.jpg)
+    COLORMAP_PARULA = 12, //!< ![parula](pics/colormaps/colorscale_parula.jpg)
+    COLORMAP_MAGMA = 13, //!< ![magma](pics/colormaps/colorscale_magma.jpg)
+    COLORMAP_INFERNO = 14, //!< ![inferno](pics/colormaps/colorscale_inferno.jpg)
+    COLORMAP_PLASMA = 15, //!< ![plasma](pics/colormaps/colorscale_plasma.jpg)
+    COLORMAP_VIRIDIS = 16, //!< ![viridis](pics/colormaps/colorscale_viridis.jpg)
+    COLORMAP_CIVIDIS = 17, //!< ![cividis](pics/colormaps/colorscale_cividis.jpg)
+    COLORMAP_TWILIGHT = 18, //!< ![twilight](pics/colormaps/colorscale_twilight.jpg)
+    COLORMAP_TWILIGHT_SHIFTED = 19, //!< ![twilight shifted](pics/colormaps/colorscale_twilight_shifted.jpg)
+    COLORMAP_TURBO = 20 //!< ![turbo](pics/colormaps/colorscale_turbo.jpg)
 };
 
-/** @example falsecolor.cpp
+/** @example samples/cpp/falsecolor.cpp
 An example using applyColorMap function
 */
+
 /** @brief Applies a GNU Octave/MATLAB equivalent colormap on a given image.
 
 @param src The source image, grayscale or colored of type CV_8UC1 or CV_8UC3.
@@ -4344,9 +4470,10 @@ CV_EXPORTS_W void rectangle(InputOutputArray img, Rect rec,
                           const Scalar& color, int thickness = 1,
                           int lineType = LINE_8, int shift = 0);
 
-/** @example Drawing_2.cpp
+/** @example samples/cpp/tutorial_code/ImgProc/basic_drawing/Drawing_2.cpp
 An example using drawing functions
- */
+*/
+
 /** @brief Draws a circle.
 
 The function cv::circle draws a simple or filled circle with a given center and radius.
@@ -4470,9 +4597,11 @@ CV_EXPORTS void fillPoly(Mat& img, const Point** pts,
                          const Scalar& color, int lineType = LINE_8, int shift = 0,
                          Point offset = Point() );
 
-/** @example Drawing_1.cpp
+/** @example samples/cpp/tutorial_code/ImgProc/basic_drawing/Drawing_1.cpp
 An example using drawing functions
- */
+Check @ref tutorial_random_generator_and_text "the corresponding tutorial" for more details
+*/
+
 /** @brief Fills the area bounded by one or more polygons.
 
 The function cv::fillPoly fills an area bounded by several polygonal contours. The function can fill
@@ -4512,14 +4641,14 @@ CV_EXPORTS_W void polylines(InputOutputArray img, InputArrayOfArrays pts,
                             bool isClosed, const Scalar& color,
                             int thickness = 1, int lineType = LINE_8, int shift = 0 );
 
-/** @example contours2.cpp
-  An example program illustrates the use of cv::findContours and cv::drawContours
-  \image html WindowsQtContoursOutput.png "Screenshot of the program"
+/** @example samples/cpp/contours2.cpp
+An example program illustrates the use of cv::findContours and cv::drawContours
+\image html WindowsQtContoursOutput.png "Screenshot of the program"
 */
 
-/** @example segment_objects.cpp
+/** @example samples/cpp/segment_objects.cpp
 An example using drawContours to clean up a background segmentation result
- */
+*/
 
 /** @brief Draws contours outlines or filled contours.
 
@@ -4718,7 +4847,7 @@ LineIterator it2 = it;
 vector<Vec3b> buf(it.count);
 
 for(int i = 0; i < it.count; i++, ++it)
-    buf[i] = *(const Vec3b)*it;
+    buf[i] = *(const Vec3b*)*it;
 
 // alternative way of iterating through the line
 for(int i = 0; i < it2.count; i++, ++it2)

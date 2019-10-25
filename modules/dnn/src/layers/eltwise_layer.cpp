@@ -64,6 +64,7 @@ public:
         MAX = 2,
     } op;
     std::vector<float> coeffs;
+    bool variableChannels;
 
     EltwiseLayerImpl(const LayerParams& params)
     {
@@ -98,7 +99,8 @@ public:
     {
         return backendId == DNN_BACKEND_OPENCV ||
                backendId == DNN_BACKEND_HALIDE ||
-               backendId == DNN_BACKEND_INFERENCE_ENGINE && (op != SUM || coeffs.empty());
+               (backendId == DNN_BACKEND_INFERENCE_ENGINE && !variableChannels &&
+                (preferableTarget != DNN_TARGET_OPENCL || coeffs.empty()));
     }
 
     bool getMemoryShapes(const std::vector<MatShape> &inputs,
@@ -107,57 +109,89 @@ public:
                          std::vector<MatShape> &internals) const CV_OVERRIDE
     {
         CV_Assert(inputs.size() >= 2);
+        CV_Assert(inputs[0].size() >= 2);
         CV_Assert(coeffs.size() == 0 || coeffs.size() == inputs.size());
         CV_Assert(op == SUM || coeffs.size() == 0);
 
+        int dims = inputs[0].size();
+        // Number of channels in output shape is determined by the first input tensor.
+        int numChannels = inputs[0][1];
         for (int i = 1; i < inputs.size(); i++)
         {
-            CV_Assert(inputs[0] == inputs[i]);
+            CV_Assert(inputs[0][0] == inputs[i][0]);
+
+            // It's allowed for channels axis to be different.
+            for (int j = 2; j < dims; j++)
+                CV_Assert(inputs[0][j] == inputs[i][j]);
         }
 
         outputs.assign(1, inputs[0]);
-
+        outputs[0][1] = numChannels;
         return false;
     }
+
+    void finalize(InputArrayOfArrays inputs_arr, OutputArrayOfArrays) CV_OVERRIDE
+    {
+        std::vector<Mat> inputs;
+        inputs_arr.getMatVector(inputs);
+        variableChannels = false;
+        for (int i = 1; i < inputs.size(); ++i)
+        {
+            if (inputs[i].size[1] != inputs[0].size[1])
+            {
+                variableChannels = true;
+                break;
+            }
+        }
+    }
+
 
     class EltwiseInvoker : public ParallelLoopBody
     {
     public:
-        const Mat** srcs;
+        std::vector<const Mat*> srcs;
         int nsrcs;
         Mat* dst;
-        const std::vector<float>* coeffs;
+        std::vector<float> coeffs;
         EltwiseOp op;
         int nstripes;
         const ActivationLayer* activ;
         int channels;
         size_t planeSize;
 
-        EltwiseInvoker() : srcs(0), nsrcs(0), dst(0), coeffs(0), op(PROD), nstripes(0), activ(0), channels(0), planeSize(0)  {}
+        EltwiseInvoker() : nsrcs(0), dst(0), op(PROD), nstripes(0), activ(0), channels(0), planeSize(0)  {}
 
-        static void run(const Mat** srcs, int nsrcs, Mat& dst,
+        static void run(const Mat* srcs, int nsrcs, Mat& dst,
                         const std::vector<float>& coeffs, EltwiseOp op,
                         const ActivationLayer* activ, int nstripes)
         {
-            CV_Assert(1 < dst.dims && dst.dims <= 4, dst.type() == CV_32F, dst.isContinuous());
+            CV_Check(dst.dims, 1 < dst.dims && dst.dims <= 5, ""); CV_CheckTypeEQ(dst.type(), CV_32FC1, ""); CV_Assert(dst.isContinuous());
             CV_Assert(coeffs.empty() || coeffs.size() == (size_t)nsrcs);
 
-            for( int i = 0; i > nsrcs; i++ )
+            EltwiseInvoker p;
+            p.srcs.resize(nsrcs);
+            p.coeffs = coeffs;
+            for( int i = 0; i < nsrcs; i++ )
             {
-                CV_Assert(srcs[i]->size == dst.size &&
-                          srcs[i]->type() == dst.type() &&
-                          srcs[i]->isContinuous());
+                p.srcs[i] = srcs + i;
+                CV_Assert(srcs[i].type() == dst.type() &&
+                          srcs[i].isContinuous());
+                // Sort srcs and coefficients in the order by number of channels
+                for( int j = i; j >= 1 && p.srcs[j - 1]->size[1] < p.srcs[j]->size[1]; j-- )
+                {
+                    std::swap(p.srcs[j - 1], p.srcs[j]);
+                    if (!p.coeffs.empty())
+                        std::swap(p.coeffs[j - 1], p.coeffs[j]);
+                }
             }
 
-            EltwiseInvoker p;
-            p.srcs = srcs;
             p.nsrcs = nsrcs;
             p.dst = &dst;
             p.op = op;
             p.nstripes = nstripes;
-            p.channels = (dst.dims == 4 ? dst.size[1] : 1);
-            p.planeSize = (dst.dims >= 3 ? dst.size[dst.dims - 1] * dst.size[dst.dims - 2] :
-                                           dst.size[dst.dims - 1]);
+            p.channels = (dst.dims >= 4 ? dst.size[1] : 1);
+
+            p.planeSize = dst.total(dst.dims >= 4 ? 2 : 1);
             CV_Assert(dst.total() == dst.size[0] * p.channels * p.planeSize);
 
             bool simpleCoeffs = true;
@@ -172,7 +206,8 @@ public:
                         break;
                     }
             }
-            p.coeffs = simpleCoeffs ? 0 : &coeffs;
+            if (simpleCoeffs)
+                p.coeffs.clear();
             p.activ = activ;
 
             parallel_for_(Range(0, nstripes), p, nstripes);
@@ -184,8 +219,8 @@ public:
             size_t stripeSize = (total + nstripes - 1)/nstripes;
             size_t stripeStart = r.start*stripeSize;
             size_t stripeEnd = std::min(r.end*stripeSize, total);
-            int c, j, k, n = nsrcs;
-            const float* coeffsptr = coeffs && !coeffs->empty() ? &coeffs->at(0) : 0;
+            int c, j, k, n;
+            const float* coeffsptr = !coeffs.empty() ? &coeffs[0] : 0;
             float* dstptr0 = dst->ptr<float>();
             int blockSize0 = 1 << 12, blockSize;
 
@@ -203,7 +238,28 @@ public:
                     const float* srcptr0 = srcs[0]->ptr<float>() + globalDelta;
                     float* dstptr = dstptr0 + globalDelta;
 
-                    if( op == PROD )
+                    // This code assumes that srcs are sorted in descending order by channels.
+                    for (n = 1; n < nsrcs && c < srcs[n]->size[1]; ++n) {}
+
+                    if (n == 1)
+                    {
+                        if( !coeffsptr )
+                        {
+                            for( j = 0; j < blockSize; j++ )
+                            {
+                                dstptr[j] = srcptr0[j];
+                            }
+                        }
+                        else
+                        {
+                            float c0 = coeffsptr[0];
+                            for( j = 0; j < blockSize; j++ )
+                            {
+                                dstptr[j] = c0*srcptr0[j];
+                            }
+                        }
+                    }
+                    else if( op == PROD )
                     {
                         for( k = 1; k < n; k++ )
                         {
@@ -271,7 +327,7 @@ public:
         std::vector<UMat> inputs;
         std::vector<UMat> outputs;
 
-        if (inputs_.depth() == CV_16S && op != SUM)
+        if ((inputs_.depth() == CV_16S && op != SUM) || variableChannels)
             return false;
 
         inputs_.getUMatVector(inputs);
@@ -354,21 +410,22 @@ public:
         CV_TRACE_FUNCTION();
         CV_TRACE_ARG_VALUE(name, "name", name.c_str());
 
-        CV_OCL_RUN(IS_DNN_OPENCL_TARGET(preferableTarget) &&
-                   OCL_PERFORMANCE_CHECK(ocl::Device::getDefault().isIntel()),
+        CV_OCL_RUN(IS_DNN_OPENCL_TARGET(preferableTarget),
                    forward_ocl(inputs_arr, outputs_arr, internals_arr))
 
-        Layer::forward_fallback(inputs_arr, outputs_arr, internals_arr);
-    }
+        if (inputs_arr.depth() == CV_16S)
+        {
+            forward_fallback(inputs_arr, outputs_arr, internals_arr);
+            return;
+        }
 
-    void forward(std::vector<Mat *> &inputs, std::vector<Mat> &outputs, std::vector<Mat> &internals) CV_OVERRIDE
-    {
-        CV_TRACE_FUNCTION();
-        CV_TRACE_ARG_VALUE(name, "name", name.c_str());
+        std::vector<Mat> inputs, outputs;
+        inputs_arr.getMatVector(inputs);
+        outputs_arr.getMatVector(outputs);
 
         CV_Assert(outputs.size() == 1);
         const int nstripes = getNumThreads();
-        EltwiseInvoker::run((const Mat**)&inputs[0], (int)inputs.size(), outputs[0],
+        EltwiseInvoker::run(&inputs[0], (int)inputs.size(), outputs[0],
                             coeffs, op, activ.get(), nstripes);
     }
 
@@ -418,31 +475,34 @@ public:
         return Ptr<BackendNode>();
     }
 
-    virtual Ptr<BackendNode> initInfEngine(const std::vector<Ptr<BackendWrapper> >&) CV_OVERRIDE
-    {
 #ifdef HAVE_INF_ENGINE
-        InferenceEngine::LayerParams lp;
-        lp.name = name;
-        lp.type = "Eltwise";
-        lp.precision = InferenceEngine::Precision::FP32;
-        std::shared_ptr<InferenceEngine::EltwiseLayer> ieLayer(new InferenceEngine::EltwiseLayer(lp));
+    virtual Ptr<BackendNode> initInfEngine(const std::vector<Ptr<BackendWrapper> >& inputs) CV_OVERRIDE
+    {
+        InferenceEngine::Builder::EltwiseLayer ieLayer(name);
+
+        ieLayer.setInputPorts(std::vector<InferenceEngine::Port>(inputs.size()));
+
         if (op == SUM)
-            ieLayer->_operation = InferenceEngine::EltwiseLayer::Sum;
+            ieLayer.setEltwiseType(InferenceEngine::Builder::EltwiseLayer::EltwiseType::SUM);
         else if (op == PROD)
-            ieLayer->_operation = InferenceEngine::EltwiseLayer::Prod;
+            ieLayer.setEltwiseType(InferenceEngine::Builder::EltwiseLayer::EltwiseType::MUL);
         else if (op == MAX)
-            ieLayer->_operation = InferenceEngine::EltwiseLayer::Max;
+            ieLayer.setEltwiseType(InferenceEngine::Builder::EltwiseLayer::EltwiseType::MAX);
         else
             CV_Error(Error::StsNotImplemented, "Unsupported eltwise operation");
-        return Ptr<BackendNode>(new InfEngineBackendNode(ieLayer));
-#endif  // HAVE_INF_ENGINE
-        return Ptr<BackendNode>();
+
+        InferenceEngine::Builder::Layer l = ieLayer;
+        if (!coeffs.empty())
+            l.getParameters()["coeff"] = coeffs;
+
+        return Ptr<BackendNode>(new InfEngineBackendNode(l));
     }
+#endif  // HAVE_INF_ENGINE
 
     virtual int64 getFLOPS(const std::vector<MatShape> &inputs,
                            const std::vector<MatShape> &outputs) const CV_OVERRIDE
     {
-        (void)outputs; // suppress unused variable warning
+        CV_UNUSED(outputs); // suppress unused variable warning
         CV_Assert(inputs.size());
 
         long flops = inputs.size() * total(inputs[0]);
@@ -452,8 +512,13 @@ public:
 
     bool setActivation(const Ptr<ActivationLayer>& layer) CV_OVERRIDE
     {
-        activ = layer;
-        return !activ.empty();
+        if (activ.empty() || layer.empty())
+        {
+            activ = layer;
+            return !activ.empty();
+        }
+        else
+            return false;
     }
 
     Ptr<ActivationLayer> activ;
