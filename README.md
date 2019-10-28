@@ -1,5 +1,7 @@
 ## OpenCV: Open Source Computer Vision Library
 
+This fork contains Delicode's projectPoints3d functionality.
+
 ### Resources
 
 * Homepage: <https://opencv.org>
