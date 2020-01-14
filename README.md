@@ -1,6 +1,6 @@
 ## OpenCV: Open Source Computer Vision Library
 
-This fork contains Delicode's projectPoints3d functionality.
+This fork contains Delicode's projectPoints3d functionality and a timeout in findChessboardCorners.
 
 ### Resources
 
