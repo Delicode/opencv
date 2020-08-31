@@ -2,6 +2,14 @@
 
 This fork contains Delicode's projectPoints3d functionality and a timeout in findChessboardCorners.
 
+If you're building OpenCV on a Linux computer targeting the Delicode Signals software stack, you'll want to use a CMake command along these lines:
+
+```
+cmake -DWITH_CUDA=no -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF -DBUILD_EXAMPLES=OFF -DBUILD_DOCS=OFF -DOPENCV_EXTRA_MODULES_PATH=/path/to/opencv_contrib/modules -DBUILD_opencv_aruco=ON .. 
+```
+
+Note you'll need `https://github.com/opencv/opencv_contrib` cloned into a path specified above.
+
 ### Resources
 
 * Homepage: <https://opencv.org>
